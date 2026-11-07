@@ -72,7 +72,7 @@ function TradingUnit() {
       setSpinFrame((f) => f + 1); sfx.click();
       if (Date.now() - start > total) {
         clearInterval(iv);
-        const r = outcomes[Math.floor(Math.random() * 4)];
+        const r = outcomes[Math.floor(Math.random() * 4)]!;
         setResult(r); setMode("result");
         r === "r" ? sfx.train() : sfx.result();
       }
@@ -110,7 +110,7 @@ function TradingUnit() {
     const s = CHASE[idleFrame % 6];
     text = "----"; segs = ["g", s, s, "g"];
   } else if (mode === "spin") {
-    text = "8888"; segs = [0, 1, 2, 3].map((i) => CHASE[(spinFrame + i) % 6] + CHASE[(spinFrame + i + 3) % 6]);
+    text = "8888"; segs = [0, 1, 2, 3].map((i) => CHASE[(spinFrame + i) % 6]! + CHASE[(spinFrame + i + 3) % 6]!);
   } else if (mode === "result") {
     text = result === "r" ? " r  " : ` ${result}  `;
     if (result === "r") text = "  r ";

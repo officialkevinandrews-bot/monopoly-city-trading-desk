@@ -15,7 +15,7 @@ const SEG: Record<string, string> = {
   g: "M14 50 L18 46 L42 46 L46 50 L42 54 L18 54 Z",
 };
 
-export function Digit({ ch, on, size = 64 }: { ch: string; on?: string; size?: number }) {
+export function Digit({ ch, on, size = 64 }: { ch: string; on?: string | undefined; size?: number | undefined }) {
   const lit = on ?? MAP[ch] ?? "";
   return (
     <svg viewBox="0 0 60 100" width={size * 0.6} height={size} aria-hidden>
@@ -26,7 +26,7 @@ export function Digit({ ch, on, size = 64 }: { ch: string; on?: string; size?: n
   );
 }
 
-export function SevenSeg({ text, size, segs }: { text: string; size?: number; segs?: (string | undefined)[] }) {
+export function SevenSeg({ text, size, segs }: { text: string; size?: number | undefined; segs?: (string | undefined)[] | undefined }) {
   return (
     <div className="flex items-center gap-1" role="img" aria-label={text}>
       {text.split("").map((c, i) => <Digit key={i} ch={c} on={segs?.[i]} size={size} />)}
