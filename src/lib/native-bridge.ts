@@ -19,8 +19,8 @@ declare global {
   }
 }
 
-export const APK_DOWNLOAD_PATH = "/monopoly-city-trading-desk.apk";
-export const APK_FILENAME = "Monopoly-City-Trading-Desk.apk";
+export const APK_DOWNLOAD_PATH = "/monopoly-city-trading-desk.apk?v=1.1.0";
+export const APK_FILENAME = "Monopoly-City-Trading-Desk-v1.1.apk";
 
 /**
  * Returns true when running inside the installed Android APK wrapper.
