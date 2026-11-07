@@ -282,9 +282,26 @@ interface GameStoreContextValue {
   totalRailroadsBuilt: number;
 }
 
-const GameStoreContext = createContext<GameStoreContextValue | null>(null);
+const GLOBAL_CTX_KEY = "__MONOPOLY_CITY_GAME_STORE_CTX__";
+const globalStoreObj = globalThis as unknown as Record<
+  string,
+   ReturnType<typeof createContext<GameStoreContextValue | null>> | undefined
+>;
+
+const GameStoreContext =
+  globalStoreObj[GLOBAL_CTX_KEY] ??
+  (globalStoreObj[GLOBAL_CTX_KEY] =
+    createContext<GameStoreContextValue | null>(null));
 
 export function GameStoreProvider({ children }: { children: ReactNode }) {
+  const existing = useContext(GameStoreContext);
+  if (existing && typeof existing.commitDiceRoll === "function") {
+    return <>{children}</>;
+  }
+  return <GameStoreProviderInner>{children}</GameStoreProviderInner>;
+}
+
+function GameStoreProviderInner({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GameSnapshot>(() => {
     if (typeof window === "undefined") return createInitialSnapshot();
     try {

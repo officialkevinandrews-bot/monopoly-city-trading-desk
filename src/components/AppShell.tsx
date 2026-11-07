@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { getSpaceShortName } from "@/lib/board-spaces";
-import { useGameStore } from "@/lib/game-store";
+import { GameStoreProvider, useGameStore } from "@/lib/game-store";
 import {
   GROUP_COLORS,
   formatK,
@@ -30,6 +30,20 @@ import {
 } from "@/lib/rent";
 
 export function AppShell({
+  children,
+  scrollable = false,
+}: {
+  children: ReactNode;
+  scrollable?: boolean;
+}) {
+  return (
+    <GameStoreProvider>
+      <AppShellInner scrollable={scrollable}>{children}</AppShellInner>
+    </GameStoreProvider>
+  );
+}
+
+function AppShellInner({
   children,
   scrollable = false,
 }: {

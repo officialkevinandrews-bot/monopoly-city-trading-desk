@@ -29,7 +29,7 @@ import {
   getSpaceShortName,
   type SpecialSpaceKind,
 } from "@/lib/board-spaces";
-import { useGameStore } from "@/lib/game-store";
+import { GameStoreProvider, useGameStore } from "@/lib/game-store";
 import {
   BONUS_BLOCKS,
   COLOR_GROUPS,
@@ -47,8 +47,16 @@ import {
 } from "@/lib/rent";
 
 export const Route = createFileRoute("/")({
-  component: TradingDeskCockpit,
+  component: TradingDeskRoute,
 });
+
+function TradingDeskRoute() {
+  return (
+    <GameStoreProvider>
+      <TradingDeskCockpit />
+    </GameStoreProvider>
+  );
+}
 
 type UnitMode = "idle" | "build" | "auction" | "auction-end";
 

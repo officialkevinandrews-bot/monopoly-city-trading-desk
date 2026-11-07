@@ -11,7 +11,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { GameStoreProvider } from "../lib/game-store";
+import { GameStoreProvider } from "@/lib/game-store";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -114,7 +114,7 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <GameStoreProvider>{children}</GameStoreProvider>
         <Scripts />
       </body>
     </html>

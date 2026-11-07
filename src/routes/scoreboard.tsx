@@ -11,7 +11,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { useGameStore } from "@/lib/game-store";
+import { GameStoreProvider, useGameStore } from "@/lib/game-store";
 import {
   GROUP_COLORS,
   formatK,
@@ -38,8 +38,16 @@ export const Route = createFileRoute("/scoreboard")({
       },
     ],
   }),
-  component: Scoreboard,
+  component: ScoreboardRoute,
 });
+
+function ScoreboardRoute() {
+  return (
+    <GameStoreProvider>
+      <Scoreboard />
+    </GameStoreProvider>
+  );
+}
 
 function Scoreboard() {
   const {

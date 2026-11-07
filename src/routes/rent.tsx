@@ -14,7 +14,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { useGameStore } from "@/lib/game-store";
+import { GameStoreProvider, useGameStore } from "@/lib/game-store";
 import {
   BONUSES,
   COLOR_GROUPS,
@@ -52,8 +52,16 @@ export const Route = createFileRoute("/rent")({
       },
     ],
   }),
-  component: RentAndCityPage,
+  component: RentAndCityRoute,
 });
+
+function RentAndCityRoute() {
+  return (
+    <GameStoreProvider>
+      <RentAndCityPage />
+    </GameStoreProvider>
+  );
+}
 
 function RentAndCityPage() {
   const {
