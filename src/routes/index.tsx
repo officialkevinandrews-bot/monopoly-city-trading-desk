@@ -119,7 +119,7 @@ function TradingUnit() {
     text = "AUC "; segs = [undefined, undefined, undefined, CHASE[Math.floor(auctionLeft * 4) % 6]];
     displayClass = auctionLeft <= 5 ? "led-flash-fast" : "led-pulse";
   } else if (mode === "sold") {
-    text = "SOLd".replace("S", "5"); displayClass = "led-flash";
+    text = "SOLd"; displayClass = "led-flash";
   }
 
   const mm = String(Math.floor(session / 60)).padStart(2, "0");

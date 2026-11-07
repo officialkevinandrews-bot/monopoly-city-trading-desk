@@ -2,7 +2,7 @@
 const MAP: Record<string, string> = {
   "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd",
   "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcfgd", "-": "g", r: "eg", " ": "",
-  A: "abcefg", U: "bcdef", C: "adef", E: "adefg", n: "ceg", d: "bcdeg", o: "cdeg", P: "abefg", L: "def", H: "bcefg",
+  A: "abcefg", U: "bcdef", C: "adef", E: "adefg", n: "ceg", d: "bcdeg", o: "cdeg", P: "abefg", L: "def", H: "bcefg", O: "abcdef", S: "afgcd",
 };
 
 const SEG: Record<string, string> = {
