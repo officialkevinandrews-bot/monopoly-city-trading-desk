@@ -414,8 +414,8 @@ function TradingDeskCockpit() {
 
   return (
     <AppShell>
-      {/* 3-ZONE ZERO-SCROLL LANDSCAPE TABLET COCKPIT */}
-      <div className="h-full w-full grid grid-cols-1 md:grid-cols-[268px_1fr_325px] xl:grid-cols-[292px_1fr_355px] gap-2 p-2 overflow-y-auto md:overflow-hidden">
+      {/* 3-ZONE ZERO-SCROLL LANDSCAPE TABLET & PHONE COCKPIT */}
+      <div className="h-full w-full grid grid-cols-[280px_1fr_345px] gap-2 p-2 overflow-hidden">
         {/* ================================================================
             LEFT COLUMN: TRADING UNIT HARDWARE + TOUCH 2-DICE ROLLER
            ================================================================ */}
@@ -789,7 +789,7 @@ function TradingDeskCockpit() {
           )}
 
           {/* 2A. 8 COLOR GROUPS (4x2 GRID) SHOWING ALL 22 DISTRICTS AT ONCE */}
-          <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-2 sm:grid-rows-4 gap-1.5">
+          <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-4 gap-1.5">
             {districtsByGroup.map(({ group, color, label, items }) => {
               const firstInfo = items[0]!;
               return (

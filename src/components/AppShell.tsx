@@ -18,10 +18,18 @@ import {
   X,
   Sparkles,
   Building2,
+  Download,
+  Smartphone,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { getSpaceShortName } from "@/lib/board-spaces";
 import { GameStoreProvider, useGameStore } from "@/lib/game-store";
+import {
+  APK_DOWNLOAD_PATH,
+  APK_FILENAME,
+  initNativeEnhancements,
+  isRunningInAndroidApk,
+} from "@/lib/native-bridge";
 import {
   GROUP_COLORS,
   formatK,
@@ -75,25 +83,96 @@ function AppShellInner({
   } = useGameStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [inApk, setInApk] = useState(false);
+  const [viewport, setViewport] = useState<{ w: number; h: number }>({
+    w: 1280,
+    h: 800,
+  });
   const [rulesTab, setRulesTab] = useState<"diff" | "buildings" | "rules">(
     "diff"
   );
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
+    setInApk(isRunningInAndroidApk());
+    const cleanupNative = initNativeEnhancements();
+
+    const updateSize = () => {
+      setViewport({
+        w: window.innerWidth || 1280,
+        h: window.innerHeight || 800,
+      });
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    window.addEventListener("orientationchange", updateSize);
+
     const onFsChange = () =>
       setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
+    return () => {
+      cleanupNative();
+      window.removeEventListener("resize", updateSize);
+      window.removeEventListener("orientationchange", updateSize);
+      document.removeEventListener("fullscreenchange", onFsChange);
+    };
   }, []);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      void document.documentElement.requestFullscreen().catch(() => {});
+      void document.documentElement
+        .requestFullscreen()
+        .then(() => {
+          try {
+            const scr = window.screen as Screen & {
+              orientation?: { lock?: (o: string) => Promise<void> };
+            };
+            void scr.orientation?.lock?.("landscape")?.catch(() => {});
+          } catch {
+            // Ignore on unsupported browsers
+          }
+        })
+        .catch(() => {});
     } else {
       void document.exitFullscreen().catch(() => {});
     }
   };
+
+  // Universal Landscape Auto-Scaler for both Android Phones & Tablets
+  const MIN_W = 1180;
+  const MIN_H = 665;
+  let cockpitStyle: CSSProperties | undefined;
+  if (!scrollable) {
+    const { w, h } = viewport;
+    if (w < h) {
+      // Device is held in portrait in a browser: auto-rotate 90deg into landscape!
+      const landW = h;
+      const landH = w;
+      const scale = Math.min(landW / MIN_W, landH / MIN_H, 1);
+      cockpitStyle = {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: `${landW / scale}px`,
+        height: `${landH / scale}px`,
+        transformOrigin: "0 0",
+        transform: `translate(${w}px, 0px) rotate(90deg) scale(${scale})`,
+      };
+    } else {
+      const scale = Math.min(w / MIN_W, h / MIN_H, 1);
+      if (scale < 0.999) {
+        cockpitStyle = {
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: `${w / scale}px`,
+          height: `${h / scale}px`,
+          transformOrigin: "0 0",
+          transform: `scale(${scale})`,
+        };
+      }
+    }
+  }
 
   const activePlayer =
     state.players[state.activePlayerIndex] ?? state.players[0]!;
@@ -109,10 +188,13 @@ function AppShellInner({
 
   return (
     <div
+      style={cockpitStyle}
       className={`${
         scrollable
           ? "min-h-screen overflow-y-auto"
-          : "flex h-dvh w-screen flex-col overflow-hidden select-none"
+          : cockpitStyle
+            ? "flex flex-col overflow-hidden select-none"
+            : "flex h-dvh w-screen flex-col overflow-hidden select-none"
       } bg-background text-foreground`}
     >
       {/* COMPACT LANDSCAPE TABLET TOP HUD */}
@@ -286,6 +368,18 @@ function AppShellInner({
               <BookOpen className="h-4 w-4 text-primary" />
               <span className="hidden sm:inline">Rules</span>
             </button>
+
+            {!inApk && (
+              <a
+                href={APK_DOWNLOAD_PATH}
+                download={APK_FILENAME}
+                title="Download Android App (.APK) for Tablets & Phones"
+                className="flex h-9 items-center gap-1 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 active:scale-95"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Download App</span>
+              </a>
+            )}
 
             <button
               type="button"
@@ -900,6 +994,35 @@ function AppShellInner({
                       tracks districts, buildings, and live rent.
                     </p>
                   </button>
+                </div>
+              </div>
+
+              {/* 3. Android App (.APK) Download Section */}
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-1.5 font-display text-xs font-bold text-emerald-300">
+                      <Smartphone className="h-4 w-4" />
+                      {inApk
+                        ? "Android Native APK Active"
+                        : "Install on Android Tablet or Phone (.APK)"}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {inApk
+                        ? "Running in offline landscape fullscreen mode with Wake Lock and Haptic Vibration."
+                        : "100% offline standalone Android app with auto-landscape scaling, Wake Lock, and Haptic Vibration."}
+                    </p>
+                  </div>
+                  {!inApk && (
+                    <a
+                      href={APK_DOWNLOAD_PATH}
+                      download={APK_FILENAME}
+                      className="flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow hover:brightness-105 active:scale-95"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download APK
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
