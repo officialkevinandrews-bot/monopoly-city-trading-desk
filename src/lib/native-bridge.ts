@@ -16,20 +16,34 @@ declare global {
   interface Window {
     AndroidBridge?: AndroidNativeBridge;
     __MONOPOLY_CITY_APK__?: boolean;
+    __MONOPOLY_CITY_WIN_APP__?: boolean;
   }
 }
 
-export const APK_DOWNLOAD_PATH = "/monopoly-city-trading-desk.apk?v=1.1.0";
-export const APK_FILENAME = "Monopoly-City-Trading-Desk-v1.1.apk";
+export const APK_DOWNLOAD_PATH = "/monopoly-city-trading-desk.apk?v=1.2.0";
+export const APK_FILENAME = "Monopoly-City-Trading-Desk-v1.2.apk";
+
+export const WIN_EXE_DOWNLOAD_PATH = "/monopoly-city-trading-desk.exe?v=1.2.0";
+export const WIN_EXE_FILENAME = "Monopoly-City-Trading-Desk-Win11.exe";
 
 /**
- * Returns true when running inside the installed Android APK wrapper.
+ * Returns true when running inside the installed Android APK or Windows 11 desktop wrapper.
  */
 export function isRunningInAndroidApk(): boolean {
   if (typeof window === "undefined") return false;
-  if (window.__MONOPOLY_CITY_APK__ || window.AndroidBridge) return true;
+  if (
+    window.__MONOPOLY_CITY_APK__ ||
+    window.__MONOPOLY_CITY_WIN_APP__ ||
+    window.AndroidBridge
+  ) {
+    return true;
+  }
   const ua = window.navigator?.userAgent ?? "";
-  return ua.includes("MonopolyCityAPK") || window.location.search.includes("apk=1");
+  return (
+    ua.includes("MonopolyCityAPK") ||
+    window.location.search.includes("apk=1") ||
+    window.location.search.includes("desktop=1")
+  );
 }
 
 /**

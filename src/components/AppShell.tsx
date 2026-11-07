@@ -20,6 +20,7 @@ import {
   Building2,
   Download,
   Smartphone,
+  Monitor,
 } from "lucide-react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { getSpaceShortName } from "@/lib/board-spaces";
@@ -27,6 +28,8 @@ import { GameStoreProvider, useGameStore } from "@/lib/game-store";
 import {
   APK_DOWNLOAD_PATH,
   APK_FILENAME,
+  WIN_EXE_DOWNLOAD_PATH,
+  WIN_EXE_FILENAME,
   initNativeEnhancements,
   isRunningInAndroidApk,
 } from "@/lib/native-bridge";
@@ -138,9 +141,9 @@ function AppShellInner({
     }
   };
 
-  // Universal Landscape Auto-Scaler for both Android Phones & Tablets
-  const MIN_W = 1180;
-  const MIN_H = 665;
+  // Universal Landscape & Fullscreen PC Auto-Scaler (Phones, Tablets, and Windows 11 1080p/1440p/4K Monitors)
+  const MIN_W = 1220;
+  const MIN_H = 685;
   let cockpitStyle: CSSProperties | undefined;
   if (!scrollable) {
     const { w, h } = viewport;
@@ -148,7 +151,7 @@ function AppShellInner({
       // Device is held in portrait in a browser: auto-rotate 90deg into landscape!
       const landW = h;
       const landH = w;
-      const scale = Math.min(landW / MIN_W, landH / MIN_H, 1);
+      const scale = Math.min(landW / MIN_W, landH / MIN_H);
       cockpitStyle = {
         position: "fixed",
         top: 0,
@@ -159,18 +162,16 @@ function AppShellInner({
         transform: `translate(${w}px, 0px) rotate(90deg) scale(${scale})`,
       };
     } else {
-      const scale = Math.min(w / MIN_W, h / MIN_H, 1);
-      if (scale < 0.999) {
-        cockpitStyle = {
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: `${w / scale}px`,
-          height: `${h / scale}px`,
-          transformOrigin: "0 0",
-          transform: `scale(${scale})`,
-        };
-      }
+      const scale = Math.min(w / MIN_W, h / MIN_H);
+      cockpitStyle = {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: `${w / scale}px`,
+        height: `${h / scale}px`,
+        transformOrigin: "0 0",
+        transform: `scale(${scale})`,
+      };
     }
   }
 
@@ -388,15 +389,26 @@ function AppShellInner({
             </button>
 
             {!inApk && (
-              <a
-                href={APK_DOWNLOAD_PATH}
-                download={APK_FILENAME}
-                title="Download Android App (.APK) for Tablets & Phones"
-                className="flex h-9 items-center gap-1 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 active:scale-95"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span>Download App</span>
-              </a>
+              <>
+                <a
+                  href={APK_DOWNLOAD_PATH}
+                  download={APK_FILENAME}
+                  title="Download Android App (.APK) for Tablets & Phones"
+                  className="flex h-9 items-center gap-1 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 active:scale-95"
+                >
+                  <Smartphone className="h-3.5 w-3.5" />
+                  <span>Download App (APK)</span>
+                </a>
+                <a
+                  href={WIN_EXE_DOWNLOAD_PATH}
+                  download={WIN_EXE_FILENAME}
+                  title="Download Standalone Windows 11 Fullscreen App (.EXE)"
+                  className="flex h-9 items-center gap-1 rounded-xl border border-sky-400/50 bg-sky-500/15 px-2 text-xs font-bold text-sky-300 hover:bg-sky-500/25 active:scale-95"
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                  <span>Windows 11 (.EXE)</span>
+                </a>
+              </>
             )}
 
             <button
@@ -1015,30 +1027,50 @@ function AppShellInner({
                 </div>
               </div>
 
-              {/* 3. Android App (.APK) Download Section */}
-              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5">
-                <div className="flex items-center justify-between gap-3">
+              {/* 3. Android App (.APK) & Windows 11 Fullscreen App (.EXE) Download Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 flex flex-col justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1.5 font-display text-xs font-bold text-emerald-300">
                       <Smartphone className="h-4 w-4" />
-                      {inApk
-                        ? "Android Native APK Active"
-                        : "Install on Android Tablet or Phone (.APK)"}
+                      Android Tablet & Phone (.APK)
                     </div>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {inApk
-                        ? "Running in offline landscape fullscreen mode with Wake Lock and Haptic Vibration."
-                        : "100% offline standalone Android app with auto-landscape scaling, Wake Lock, and Haptic Vibration."}
+                      100% offline Android app with auto-landscape scaling, Wake
+                      Lock, and Haptic Vibration.
                     </p>
                   </div>
                   {!inApk && (
                     <a
                       href={APK_DOWNLOAD_PATH}
                       download={APK_FILENAME}
-                      className="flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow hover:brightness-105 active:scale-95"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950 shadow hover:brightness-105 active:scale-95"
                     >
                       <Download className="h-4 w-4" />
-                      Download APK
+                      Download Android APK
+                    </a>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-sky-400/40 bg-sky-500/10 p-3 flex flex-col justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 font-display text-xs font-bold text-sky-300">
+                      <Monitor className="h-4 w-4" />
+                      Windows 11 PC App (.EXE)
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Standalone offline Windows 11 Fullscreen desktop app —
+                      scales to 1080p, 1440p & 4K monitors.
+                    </p>
+                  </div>
+                  {!inApk && (
+                    <a
+                      href={WIN_EXE_DOWNLOAD_PATH}
+                      download={WIN_EXE_FILENAME}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950 shadow hover:brightness-105 active:scale-95"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Windows 11 .EXE
                     </a>
                   )}
                 </div>

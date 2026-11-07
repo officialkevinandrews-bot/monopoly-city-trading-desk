@@ -28,6 +28,7 @@ describe("App routing", () => {
     expect(screen.getByText("③ Build")).toBeTruthy();
     expect(screen.getByText("④ End")).toBeTruthy();
     expect(screen.getAllByText(/Download App/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Windows 11/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Summergate/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Diamond Hills/i).length).toBeGreaterThan(0);
   });
