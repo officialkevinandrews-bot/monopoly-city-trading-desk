@@ -18,7 +18,7 @@ export const Route = createFileRoute("/rent")({
 
 function RentPage() {
   const [q, setQ] = useState("");
-  const [id, setId] = useState(DISTRICTS[0].id);
+  const [id, setId] = useState(DISTRICTS[0]!.id);
   const [res, setRes] = useState(0);
   const [ind, setInd] = useState(0);
   const [hazard, setHazard] = useState<HazardKey>("none");

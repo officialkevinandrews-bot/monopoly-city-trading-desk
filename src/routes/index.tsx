@@ -104,7 +104,7 @@ function TradingUnit() {
   const stop = () => { sfx.press(); clearAll(); setMode("idle"); };
 
   let text = "    ";
-  let segs: (string | undefined)[] | undefined;
+  let segs: (string | undefined)[] | undefined = undefined;
   let displayClass = "";
   if (mode === "idle") {
     const s = CHASE[idleFrame % 6];
