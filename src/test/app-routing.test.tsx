@@ -20,9 +20,14 @@ describe("App routing", () => {
   it("renders the full TradingDeskRoute cockpit without runtime errors", () => {
     const Comp = IndexRoute.options.component!;
     render(<Comp />);
-    expect(screen.getByText("BUILD")).toBeTruthy();
-    expect(screen.getByText("AUCTION")).toBeTruthy();
-    expect(screen.getByText("ROLL DICE")).toBeTruthy();
+    expect(screen.getAllByText("BUILD").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AUCTION").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/ROLL DICE/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("① Roll")).toBeTruthy();
+    expect(screen.getByText("② Land")).toBeTruthy();
+    expect(screen.getByText("③ Build")).toBeTruthy();
+    expect(screen.getByText("④ End")).toBeTruthy();
+    expect(screen.getAllByText(/Download App/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Summergate/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Diamond Hills/i).length).toBeGreaterThan(0);
   });

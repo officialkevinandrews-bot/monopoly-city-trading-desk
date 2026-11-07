@@ -113,3 +113,4 @@ export function initNativeEnhancements(): () => void {
     window.removeEventListener("pointerdown", onFirstInteraction);
   };
 }
+

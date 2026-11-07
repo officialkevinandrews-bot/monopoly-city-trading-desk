@@ -540,8 +540,33 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const getNextStepForSpace = useCallback(
+    (spaceIndex: number, playerId: string, districtsMap: Record<string, DistrictState>): TurnStep => {
+      const sp = BOARD_SPACES[((spaceIndex % 40) + 40) % 40]!;
+      if (sp.kind === "go" || sp.kind === "jail") {
+        return "build";
+      }
+      if (sp.kind === "go_to_jail") {
+        return "done";
+      }
+      if (sp.kind === "district" && sp.districtId) {
+        const dst = districtsMap[sp.districtId];
+        if (!dst) return "land";
+        if (dst.ownerId === playerId || (dst.ownerId && dst.mortgaged)) {
+          return "build";
+        }
+        return "land";
+      }
+      return "land";
+    },
+    []
+  );
+
   const commitDiceRoll = useCallback(
     (d1: number, d2: number): DiceRollOutcome => {
+      if (state.turnStep !== "start" && state.lastDiceRoll) {
+        return state.lastDiceRoll;
+      }
       const activePlayer =
         state.players[state.activePlayerIndex] ?? state.players[0]!;
       const total = d1 + d2;
@@ -552,6 +577,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       if (activePlayer.inJail) {
         if (isDoubles) {
           const toIndex = (10 + total) % 40;
+          const nextStep = getNextStepForSpace(toIndex, activePlayer.id, state.districts);
           const outcome: DiceRollOutcome = {
             playerId: activePlayer.id,
             d1,
@@ -569,7 +595,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
           commit(
             (prev) => ({
               ...prev,
-              turnStep: "land",
+              turnStep: nextStep,
               lastDiceRoll: outcome,
               players: prev.players.map((p) =>
                 p.id === activePlayer.id
@@ -635,7 +661,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
         commit(
           (prev) => ({
             ...prev,
-            turnStep: "build",
+            turnStep: "done",
             lastDiceRoll: outcome,
             players: prev.players.map((p) =>
               p.id === activePlayer.id
@@ -659,6 +685,9 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       const finalIndex = isGoToJail ? 10 : landedIndex;
       const passedGo = !isGoToJail && rawTarget >= 40;
       const goSalary = BASE_GO_SALARY + activePlayer.stadiums * STADIUM_GO_BONUS;
+      const nextStep = isGoToJail
+        ? "done"
+        : getNextStepForSpace(finalIndex, activePlayer.id, state.districts);
 
       const outcome: DiceRollOutcome = {
         playerId: activePlayer.id,
@@ -678,7 +707,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       commit(
         (prev) => ({
           ...prev,
-          turnStep: "land",
+          turnStep: nextStep,
           lastDiceRoll: outcome,
           players: prev.players.map((p) => {
             if (p.id !== activePlayer.id) return p;
@@ -709,7 +738,17 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       selectSpaceInInspector(finalIndex);
       return outcome;
     },
-    [commit, selectSpaceInInspector, state.activePlayerIndex, state.edition, state.players]
+    [
+      commit,
+      getNextStepForSpace,
+      selectSpaceInInspector,
+      state.activePlayerIndex,
+      state.districts,
+      state.edition,
+      state.lastDiceRoll,
+      state.players,
+      state.turnStep,
+    ]
   );
 
   const movePlayerToSpace = useCallback(
@@ -1021,16 +1060,23 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
     (playerId: string, useTaxDodge = false) => {
       const stats = getPlayerStats(playerId);
       if (stats.industrialBlockCount === 0) {
-        commit((prev) => prev, {
-          type: "info",
-          text: `${stats.player.name} landed on Industry Tax — owns 0 Industrial blocks, so pays M0!`,
-        });
+        commit(
+          (prev) => ({
+            ...prev,
+            turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
+          }),
+          {
+            type: "info",
+            text: `${stats.player.name} landed on Industry Tax — owns 0 Industrial blocks, so pays M0!`,
+          }
+        );
         return;
       }
       if (useTaxDodge) {
         commit(
           (prev) => ({
             ...prev,
+            turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
             players: prev.players.map((p) =>
               p.id === playerId ? { ...p, hasTaxDodge: false } : p
             ),
@@ -1045,6 +1091,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       commit(
         (prev) => ({
           ...prev,
+          turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
           players: prev.players.map((p) =>
             p.id === playerId && prev.bankingMode === "digital"
               ? { ...p, cash: Math.max(0, p.cash - INDUSTRY_TAX_AMOUNT) }
@@ -1069,6 +1116,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       commit(
         (prev) => ({
           ...prev,
+          turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
           rentDodgeHolderId: playerId,
         }),
         {
@@ -1093,6 +1141,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       commit(
         (prev) => ({
           ...prev,
+          turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
           players: prev.players.map((p) =>
             p.id === playerId && prev.bankingMode === "digital"
               ? { ...p, cash: Math.max(0, p.cash - cost) }
@@ -1124,6 +1173,10 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       commit(
         (prev) => ({
           ...prev,
+          turnStep:
+            prev.turnStep === "land" && ownerId !== null
+              ? "build"
+              : prev.turnStep,
           districts: {
             ...prev.districts,
             [districtId]: {
@@ -1209,33 +1262,42 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
         state.players.find((p) => p.id === ownerId)?.name ?? "Player";
 
       commit(
-        (prev) => ({
-          ...prev,
-          blocksRemainingThisTurn: Math.max(
+        (prev) => {
+          const nextRemaining = Math.max(
             0,
             prev.blocksRemainingThisTurn - allowedCount
-          ),
-          players: prev.players.map((p) =>
-            chargePlayer && prev.bankingMode === "digital" && p.id === ownerId
-              ? { ...p, cash: Math.max(0, p.cash - totalCost) }
-              : p
-          ),
-          districts: {
-            ...prev.districts,
-            [districtId]: {
-              ...prev.districts[districtId]!,
-              ownerId: info.state.ownerId ?? ownerId ?? null,
-              residential:
-                type === "residential"
-                  ? info.state.residential + allowedCount
-                  : info.state.residential,
-              industrial:
-                type === "industrial"
-                  ? info.state.industrial + allowedCount
-                  : info.state.industrial,
+          );
+          return {
+            ...prev,
+            blocksRemainingThisTurn: nextRemaining,
+            turnStep:
+              prev.turnStep === "build" &&
+              prev.lastBuildRoll !== "" &&
+              nextRemaining === 0
+                ? "done"
+                : prev.turnStep,
+            players: prev.players.map((p) =>
+              chargePlayer && prev.bankingMode === "digital" && p.id === ownerId
+                ? { ...p, cash: Math.max(0, p.cash - totalCost) }
+                : p
+            ),
+            districts: {
+              ...prev.districts,
+              [districtId]: {
+                ...prev.districts[districtId]!,
+                ownerId: info.state.ownerId ?? ownerId ?? null,
+                residential:
+                  type === "residential"
+                    ? info.state.residential + allowedCount
+                    : info.state.residential,
+                industrial:
+                  type === "industrial"
+                    ? info.state.industrial + allowedCount
+                    : info.state.industrial,
+              },
             },
-          },
-        }),
+          };
+        },
         {
           type: "build",
           text: `${ownerName} built ${allowedCount} ${
@@ -1257,6 +1319,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
         (prev) => ({
           ...prev,
           railroadEarnedThisTurn: false,
+          turnStep: prev.turnStep === "build" ? "done" : prev.turnStep,
           districts: {
             ...prev.districts,
             [districtId]: {
@@ -1289,6 +1352,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
         commit(
           (prev) => ({
             ...prev,
+            turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
             districts: {
               ...prev.districts,
               [districtId]: {
@@ -1313,6 +1377,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
         commit(
           (prev) => ({
             ...prev,
+            turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
             districts: {
               ...prev.districts,
               [districtId]: {
@@ -1534,6 +1599,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
         commit(
           (prev) => ({
             ...prev,
+            turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
             rentDodgeHolderId: null,
           }),
           {
@@ -1552,6 +1618,7 @@ function GameStoreProviderInner({ children }: { children: ReactNode }) {
       commit(
         (prev) => ({
           ...prev,
+          turnStep: prev.turnStep === "land" ? "build" : prev.turnStep,
           players: prev.players.map((p) => {
             if (prev.bankingMode !== "digital") return p;
             if (p.id === payerId)

@@ -298,14 +298,32 @@ function AppShellInner({
 
             <button
               type="button"
+              disabled={state.turnStep === "start"}
               onClick={() =>
-                nextTurn(Boolean(state.lastDiceRoll?.isDoubles && !activePlayer.inJail))
+                nextTurn(
+                  Boolean(state.lastDiceRoll?.isDoubles && !activePlayer.inJail)
+                )
               }
-              className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-primary px-3 text-xs font-bold text-primary-foreground shadow active:scale-95"
+              title={
+                state.turnStep === "start"
+                  ? "Roll the dice first before ending your turn"
+                  : "Finish turn and pass to next player"
+              }
+              className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-xs font-bold shadow transition active:scale-95 disabled:opacity-40 ${
+                state.turnStep === "done"
+                  ? "bg-amber-400 text-slate-950 ring-2 ring-amber-300 animate-pulse"
+                  : "bg-primary text-primary-foreground"
+              }`}
             >
-              {state.lastDiceRoll?.isDoubles && !activePlayer.inJail
-                ? "Doubles! Roll Again"
-                : "Next Turn"}
+              {state.turnStep === "start"
+                ? "Roll Dice First"
+                : state.lastDiceRoll?.isDoubles && !activePlayer.inJail
+                  ? "🎲 Doubles! Roll Again"
+                  : `End Turn → ${
+                      state.players[
+                        (state.activePlayerIndex + 1) % state.players.length
+                      ]?.name ?? "Next"
+                    }`}
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>

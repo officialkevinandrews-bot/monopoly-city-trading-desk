@@ -122,3 +122,4 @@ export function getSpaceShortName(
   }
   return space.shortLabel;
 }
+

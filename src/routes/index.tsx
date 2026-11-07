@@ -159,6 +159,8 @@ function TradingDeskCockpit() {
     sessionRunning,
     setSessionRunning,
     resetTimer,
+    setTurnStep,
+    nextTurn,
     commitDiceRoll,
     movePlayerToSpace,
     adjustCash,
@@ -230,6 +232,16 @@ function TradingDeskCockpit() {
       setAnimDice([state.lastDiceRoll.d1, state.lastDiceRoll.d2]);
     }
   }, [state.lastDiceRoll, diceRolling]);
+
+  // Reset Trading Unit display when turn changes
+  useEffect(() => {
+    if (state.turnStep === "start") {
+      clearAllTimers();
+      setUnitMode("idle");
+      setDisplay("----");
+      setStatusText("ROLL DICE FIRST");
+    }
+  }, [state.turnNumber, state.activePlayerIndex, state.turnStep, clearAllTimers]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -341,9 +353,19 @@ function TradingDeskCockpit() {
 
   /**
    * 3. TOUCH 2-DICE ROLLER (Animates dice & auto-moves active player along 40-space board)
+   * Strictly locked to 1 roll per turn (unless the player rolled Doubles and starts their bonus turn).
    */
+  const canRollDice = state.turnStep === "start" && !diceRolling;
+  const canSpinBuild = state.lastBuildRoll === "";
+  const nextPlayer =
+    state.players[(state.activePlayerIndex + 1) % state.players.length] ??
+    activePlayer;
+  const hasBonusDoublesTurn = Boolean(
+    state.lastDiceRoll?.isDoubles && !activePlayer.inJail
+  );
+
   const handleRollDice = () => {
-    if (diceRolling) return;
+    if (!canRollDice) return;
     setDiceRolling(true);
     sfx.diceClatter();
 
@@ -515,22 +537,33 @@ function TradingDeskCockpit() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={triggerBuildUnit}
-                className="btn-red-tactile rounded-xl py-2.5 px-2 flex flex-col items-center justify-center gap-0.5 text-white select-none active:scale-95"
+                disabled={!canSpinBuild}
+                className={`btn-red-tactile rounded-xl py-2.5 px-2 flex flex-col items-center justify-center gap-0.5 text-white select-none active:scale-95 disabled:opacity-45 ${
+                  state.turnStep === "build" && canSpinBuild
+                    ? "ring-2 ring-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.5)] animate-pulse"
+                    : ""
+                }`}
               >
                 <div className="flex items-center gap-1">
                   <Hammer className="w-4 h-4 drop-shadow" />
                   <span className="font-display text-base tracking-wider leading-none">
-                    BUILD
+                    {canSpinBuild
+                      ? "BUILD"
+                      : `SPUN: ${state.lastBuildRoll.toUpperCase()}`}
                   </span>
                 </div>
                 <span className="text-[9px] font-mono uppercase tracking-wider text-white/85">
-                  Spin 1 • 2 • 3 • 🚂
+                  {canSpinBuild ? "Spin 1 • 2 • 3 • 🚂" : "1 Spin Per Turn"}
                 </span>
               </button>
 
               <button
                 onClick={triggerAuctionUnit}
-                className="btn-red-tactile rounded-xl py-2.5 px-2 flex flex-col items-center justify-center gap-0.5 text-white select-none active:scale-95"
+                className={`btn-red-tactile rounded-xl py-2.5 px-2 flex flex-col items-center justify-center gap-0.5 text-white select-none active:scale-95 ${
+                  state.turnStep === "land" && !ds.ownerId
+                    ? "ring-2 ring-amber-300"
+                    : ""
+                }`}
               >
                 <div className="flex items-center gap-1">
                   <Gavel className="w-4 h-4 drop-shadow" />
@@ -581,7 +614,13 @@ function TradingDeskCockpit() {
           </div>
 
           {/* 1B. TOUCH 2-DICE ROLLER & LIVE BOARD POSITION TRACKER */}
-          <div className="flex-1 min-h-0 rounded-2xl border border-border bg-card/95 p-2.5 flex flex-col justify-between gap-1.5 overflow-hidden">
+          <div
+            className={`flex-1 min-h-0 rounded-2xl border p-2.5 flex flex-col justify-between gap-1.5 overflow-hidden transition ${
+              state.turnStep === "start"
+                ? "border-amber-400 bg-card shadow-[0_0_18px_rgba(251,191,36,0.2)]"
+                : "border-border bg-card/95"
+            }`}
+          >
             {/* Active Player & Current Board Location Header */}
             <div className="flex items-center justify-between gap-1">
               <div className="flex items-center gap-1.5 min-w-0">
@@ -593,7 +632,11 @@ function TradingDeskCockpit() {
                   {activePlayer.name.toUpperCase()} DICE
                 </span>
               </div>
-              {activePlayer.inJail ? (
+              {state.turnStep === "start" ? (
+                <span className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-mono text-[9px] font-black animate-pulse">
+                  STEP 1: ROLL NOW
+                </span>
+              ) : activePlayer.inJail ? (
                 <span className="px-1.5 py-0.5 rounded bg-destructive/20 border border-destructive/40 text-destructive font-mono text-[9px] font-bold">
                   🔒 IN JAIL
                 </span>
@@ -602,17 +645,19 @@ function TradingDeskCockpit() {
                   DOUBLES ×{activePlayer.doublesStreak}
                 </span>
               ) : (
-                <span className="text-[10px] font-mono text-muted-foreground">
-                  Space #{activePlayer.position}
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold">
+                  ✓ ROLLED
                 </span>
               )}
             </div>
 
-            {/* Dice Visuals + Big Touch ROLL DICE Button */}
+            {/* Dice Visuals + Big Touch ROLL DICE Button (Locked once rolled!) */}
             <div className="flex items-center gap-2.5 my-auto">
               <div
                 onClick={handleRollDice}
-                className="flex items-center gap-1.5 cursor-pointer select-none"
+                className={`flex items-center gap-1.5 select-none ${
+                  canRollDice ? "cursor-pointer" : "opacity-85"
+                }`}
               >
                 <DieFace
                   value={animDice[0]}
@@ -626,19 +671,46 @@ function TradingDeskCockpit() {
                 />
               </div>
 
-              <button
-                onClick={handleRollDice}
-                disabled={diceRolling}
-                className="flex-1 h-12 rounded-xl bg-gradient-to-b from-amber-400 to-amber-500 text-slate-950 font-display text-lg tracking-wider shadow-lg hover:brightness-105 active:scale-95 transition flex flex-col items-center justify-center leading-none select-none"
-              >
-                <span className="flex items-center gap-1">
-                  <Dices className="w-4 h-4" />
-                  {diceRolling ? "ROLLING..." : "ROLL DICE"}
-                </span>
-                <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-900/80 mt-0.5">
-                  Auto-Moves Token
-                </span>
-              </button>
+              {state.turnStep === "start" ? (
+                <button
+                  onClick={handleRollDice}
+                  disabled={!canRollDice}
+                  className="flex-1 h-12 rounded-xl bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 font-display text-lg tracking-wider shadow-lg ring-2 ring-amber-200 hover:brightness-105 active:scale-95 transition flex flex-col items-center justify-center leading-none select-none"
+                >
+                  <span className="flex items-center gap-1">
+                    <Dices className="w-4 h-4" />
+                    {diceRolling ? "ROLLING..." : "ROLL DICE"}
+                  </span>
+                  <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-900/80 mt-0.5">
+                    Step 1 of Turn
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    sfx.click();
+                    nextTurn(hasBonusDoublesTurn);
+                  }}
+                  className={`flex-1 h-12 rounded-xl font-display text-sm tracking-wider shadow transition flex flex-col items-center justify-center leading-none select-none active:scale-95 ${
+                    state.turnStep === "done"
+                      ? "bg-gradient-to-b from-emerald-400 to-emerald-500 text-slate-950 ring-2 ring-emerald-200 animate-pulse"
+                      : "bg-secondary border border-border text-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  <span className="flex items-center gap-1 font-bold">
+                    {hasBonusDoublesTurn
+                      ? "🎲 ROLL AGAIN!"
+                      : `END TURN → ${nextPlayer.name.slice(0, 6).toUpperCase()}`}
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-wider opacity-80 mt-0.5">
+                    {hasBonusDoublesTurn
+                      ? "Doubles Bonus Turn"
+                      : state.turnStep === "land"
+                        ? "Resolve Space First →"
+                        : "Finish Turn"}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Last Roll & Landed Space Banner */}
@@ -767,6 +839,98 @@ function TradingDeskCockpit() {
             CENTER COLUMN: ALL-IN-ONE 22-DISTRICT COLOR GRID + SPECIAL SPACES
            ================================================================ */}
         <div className="h-full min-h-0 flex flex-col gap-1.5 overflow-hidden">
+          {/* GUIDED 4-STEP TURN TRACKER BANNER */}
+          <div className="shrink-0 rounded-xl border border-border bg-card/95 px-2.5 py-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              {(
+                [
+                  ["start", "① Roll"],
+                  ["land", "② Land"],
+                  ["build", "③ Build"],
+                  ["done", "④ End"],
+                ] as const
+              ).map(([stepKey, label]) => {
+                const active = state.turnStep === stepKey;
+                return (
+                  <span
+                    key={stepKey}
+                    className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold transition ${
+                      active
+                        ? "bg-amber-400 text-slate-950 shadow-sm"
+                        : "bg-secondary/60 text-muted-foreground"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="flex-1 min-w-0 text-center truncate text-[11px] font-semibold text-foreground">
+              {state.turnStep === "start" ? (
+                <span className="text-amber-300">
+                  👉 <strong>{activePlayer.name}</strong>: Tap{" "}
+                  <strong>ROLL DICE</strong> to start your turn
+                </span>
+              ) : state.turnStep === "land" ? (
+                <span className="text-emerald-300">
+                  📍 Landed on{" "}
+                  <strong>
+                    {getSpaceShortName(activePlayer.position, state.edition)}
+                  </strong>{" "}
+                  — resolve action on the right
+                </span>
+              ) : state.turnStep === "build" ? (
+                <span className="text-sky-300">
+                  🔨 Press <strong>BUILD</strong> to spin for blocks/railroad, or
+                  finish turn
+                </span>
+              ) : hasBonusDoublesTurn ? (
+                <span className="text-amber-300">
+                  🎲 <strong>{activePlayer.name}</strong> rolled Doubles — tap{" "}
+                  <strong>ROLL AGAIN!</strong>
+                </span>
+              ) : (
+                <span className="text-emerald-300">
+                  ✅ Turn complete — tap{" "}
+                  <strong>End Turn → {nextPlayer.name}</strong>
+                </span>
+              )}
+            </div>
+
+            {state.turnStep === "start" ? (
+              <button
+                onClick={handleRollDice}
+                disabled={!canRollDice}
+                className="shrink-0 px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 font-mono text-[10px] font-black hover:brightness-105 active:scale-95"
+              >
+                🎲 Roll Now
+              </button>
+            ) : state.turnStep === "land" ? (
+              <button
+                onClick={() => {
+                  sfx.click();
+                  setTurnStep("build");
+                }}
+                className="shrink-0 px-2.5 py-0.5 rounded-lg bg-secondary border border-border text-foreground font-mono text-[10px] font-bold hover:bg-secondary/80 active:scale-95"
+              >
+                Next: Build →
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  sfx.click();
+                  nextTurn(hasBonusDoublesTurn);
+                }}
+                className="shrink-0 px-2.5 py-0.5 rounded-lg bg-emerald-400 text-slate-950 font-mono text-[10px] font-black hover:brightness-105 active:scale-95"
+              >
+                {hasBonusDoublesTurn
+                  ? "🎲 Roll Again"
+                  : `End Turn → ${nextPlayer.name.slice(0, 6)}`}
+              </button>
+            )}
+          </div>
+
           {/* Optional Planning Permission Target Banner */}
           {pendingPlanningPick && (
             <div className="shrink-0 rounded-xl bg-amber-400/20 border border-amber-400 px-3 py-1 flex items-center justify-between text-xs">
@@ -828,6 +992,8 @@ function TradingDeskCockpit() {
                       const isSelected =
                         selectedInspector.type === "district" &&
                         selectedInspector.districtId === item.district.id;
+                      const isActivePlayerHere =
+                        item.district.boardSpaceIndex === activePlayer.position;
                       const st = item.state;
                       const r = item.rentResult;
 
@@ -836,11 +1002,13 @@ function TradingDeskCockpit() {
                           key={item.district.id}
                           onClick={() => handleTileTap(item.district.id)}
                           className={`relative rounded-lg p-1.5 text-left flex flex-col justify-between transition select-none min-h-0 overflow-hidden border ${
-                            isSelected
-                              ? "border-primary bg-primary/15 shadow-[0_0_0_1px_oklch(0.84_0.17_85)]"
-                              : pendingPlanningPick
-                                ? "border-amber-400/60 bg-secondary/70 hover:bg-amber-400/15"
-                                : "border-border/80 bg-secondary/45 hover:bg-secondary/80 active:scale-[0.98]"
+                            isActivePlayerHere && state.turnStep === "land"
+                              ? "border-amber-400 bg-amber-400/20 ring-2 ring-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.35)]"
+                              : isSelected
+                                ? "border-primary bg-primary/15 shadow-[0_0_0_1px_oklch(0.84_0.17_85)]"
+                                : pendingPlanningPick
+                                  ? "border-amber-400/60 bg-secondary/70 hover:bg-amber-400/15"
+                                  : "border-border/80 bg-secondary/45 hover:bg-secondary/80 active:scale-[0.98]"
                           }`}
                         >
                           {/* Top Color Accent Bar */}
@@ -1178,9 +1346,28 @@ function TradingDeskCockpit() {
               </div>
 
               {/* 3B. ONE-TAP OWNER PILLS & BUY / RENT / MORTGAGE BAR */}
-              <div className="rounded-xl border border-border bg-secondary/35 p-2 flex flex-col gap-1.5 shrink-0">
+              <div
+                className={`rounded-xl border p-2 flex flex-col gap-1.5 shrink-0 transition ${
+                  state.turnStep === "land" &&
+                  activePlayer.position === d.boardSpaceIndex
+                    ? "border-amber-400 bg-amber-400/10 shadow-[0_0_15px_rgba(251,191,36,0.2)]"
+                    : "border-border bg-secondary/35"
+                }`}
+              >
                 <div className="flex items-center justify-between text-[9px] font-mono uppercase tracking-wider text-muted-foreground">
-                  <span>1-Tap Owner Assignment</span>
+                  <span
+                    className={
+                      state.turnStep === "land" &&
+                      activePlayer.position === d.boardSpaceIndex
+                        ? "text-amber-300 font-bold"
+                        : ""
+                    }
+                  >
+                    {state.turnStep === "land" &&
+                    activePlayer.position === d.boardSpaceIndex
+                      ? `📍 STEP 2: ${activePlayer.name} LANDED HERE`
+                      : "1-Tap Owner Assignment"}
+                  </span>
                   <button
                     onClick={() => {
                       sfx.click();
@@ -1246,7 +1433,12 @@ function TradingDeskCockpit() {
                         sfx.cash();
                         buyDistrict(d.id, activePlayer.id);
                       }}
-                      className="py-1.5 px-2 rounded-lg bg-emerald-500 text-slate-950 font-semibold text-xs flex items-center justify-center gap-1 shadow hover:brightness-105 active:scale-95"
+                      className={`py-1.5 px-2 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1 shadow hover:brightness-105 active:scale-95 ${
+                        state.turnStep === "land" &&
+                        activePlayer.position === d.boardSpaceIndex
+                          ? "ring-2 ring-emerald-200 animate-pulse"
+                          : ""
+                      }`}
                     >
                       <Coins className="w-3.5 h-3.5" />
                       Buy ({formatK(d.price)})
@@ -1256,7 +1448,7 @@ function TradingDeskCockpit() {
                       className="py-1.5 px-2 rounded-lg bg-amber-400/20 border border-amber-400/40 text-amber-300 font-semibold text-xs flex items-center justify-center gap-1 hover:bg-amber-400/30 active:scale-95"
                     >
                       <Gavel className="w-3.5 h-3.5" />
-                      Run Auction
+                      Decline → Auction
                     </button>
                   </div>
                 ) : ds.ownerId !== activePlayer.id && !ds.mortgaged ? (
@@ -1266,7 +1458,12 @@ function TradingDeskCockpit() {
                         sfx.cash();
                         payRentOnDistrict(d.id, activePlayer.id, false);
                       }}
-                      className="flex-1 py-1.5 px-2 rounded-lg bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1 shadow hover:brightness-105 active:scale-95"
+                      className={`flex-1 py-1.5 px-2 rounded-lg bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1 shadow hover:brightness-105 active:scale-95 ${
+                        state.turnStep === "land" &&
+                        activePlayer.position === d.boardSpaceIndex
+                          ? "ring-2 ring-amber-200 animate-pulse"
+                          : ""
+                      }`}
                     >
                       <Coins className="w-3.5 h-3.5" />
                       {activePlayer.name.slice(0, 6)} Pays {formatK(res.rent)}
@@ -1283,6 +1480,18 @@ function TradingDeskCockpit() {
                       </button>
                     )}
                   </div>
+                ) : state.turnStep === "land" &&
+                  activePlayer.position === d.boardSpaceIndex ? (
+                  <button
+                    onClick={() => {
+                      sfx.click();
+                      setTurnStep("build");
+                    }}
+                    className="w-full py-1.5 px-2 rounded-lg bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-mono text-xs font-bold flex items-center justify-center gap-1 active:scale-95"
+                  >
+                    ✅ {ds.mortgaged ? "Mortgaged (M0)" : "Owned by You"} —
+                    Continue to Build →
+                  </button>
                 ) : null}
               </div>
 
@@ -1939,6 +2148,19 @@ function TradingDeskCockpit() {
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* Bottom Guided Step Advancement Button for Special Spaces */}
+              {state.turnStep === "land" && (
+                <button
+                  onClick={() => {
+                    sfx.click();
+                    setTurnStep("build");
+                  }}
+                  className="w-full py-2 rounded-xl bg-emerald-500 text-slate-950 font-display text-base tracking-wider shadow active:scale-95 shrink-0"
+                >
+                  ✅ DONE SPACE ACTION → CONTINUE TO BUILD STEP
+                </button>
               )}
             </div>
           )}
