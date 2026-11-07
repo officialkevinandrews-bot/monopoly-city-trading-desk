@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BOARD_SPACES, getSpaceShortName } from "./board-spaces";
 import { DISTRICTS, calculateRent, formatK } from "./rent";
 
 const base = {
@@ -70,5 +71,26 @@ describe("calculateRent", () => {
     expect(formatK(240)).toBe("M240k");
     expect(formatK(1500)).toBe("M1.5M");
     expect(formatK(15000)).toBe("M15M");
+  });
+
+  it("maps all 40 board spaces and all 22 districts accurately", () => {
+    expect(BOARD_SPACES).toHaveLength(40);
+    expect(BOARD_SPACES[0]?.kind).toBe("go");
+    expect(BOARD_SPACES[10]?.kind).toBe("jail");
+    expect(BOARD_SPACES[20]?.kind).toBe("free_parking");
+    expect(BOARD_SPACES[30]?.kind).toBe("go_to_jail");
+    expect(BOARD_SPACES[5]?.kind).toBe("planning");
+    expect(BOARD_SPACES[15]?.kind).toBe("planning");
+    expect(BOARD_SPACES[25]?.kind).toBe("planning");
+    expect(BOARD_SPACES[35]?.kind).toBe("planning");
+    expect(BOARD_SPACES[12]?.kind).toBe("auction");
+    expect(BOARD_SPACES[28]?.kind).toBe("auction");
+    expect(BOARD_SPACES[4]?.kind).toBe("industry_tax");
+    expect(BOARD_SPACES[38]?.kind).toBe("industry_tax");
+
+    const districtSpaces = BOARD_SPACES.filter((s) => s.kind === "district");
+    expect(districtSpaces).toHaveLength(22);
+    expect(getSpaceShortName(1, "city")).toBe("#1 Summergate");
+    expect(getSpaceShortName(39, "city")).toBe("#22 Diamond Hills");
   });
 });

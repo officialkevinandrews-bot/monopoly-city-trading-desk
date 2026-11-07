@@ -8,6 +8,11 @@ import {
   type ReactNode,
 } from "react";
 import {
+  BOARD_SPACES,
+  getSpaceDisplayName,
+  type SpecialSpaceKind,
+} from "./board-spaces";
+import {
   BASE_GO_SALARY,
   COLOR_GROUPS,
   DEMOLITION_PER_BLOCK,
@@ -37,6 +42,10 @@ export interface PlayerState {
   /** Cash in thousands (k). Default 15000 = M15M. */
   cash: number;
   inJail: boolean;
+  /** Current board space index (0 = GO .. 39 = Diamond Hills). */
+  position: number;
+  /** Consecutive doubles rolled this turn (3 -> Jail). */
+  doublesStreak: number;
   /** Number of Stadiums owned (0..2 across all players). */
   stadiums: number;
   hasTaxDodge: boolean;
@@ -58,6 +67,26 @@ export interface DistrictState {
 export type TurnStep = "start" | "land" | "build" | "done";
 export type BankingMode = "digital" | "physical";
 export type CompanionUiMode = "guided" | "dashboard";
+export type OverlayModal = "none" | "scoreboard" | "rules" | "setup";
+
+export interface DiceRollOutcome {
+  playerId: string;
+  d1: number;
+  d2: number;
+  total: number;
+  isDoubles: boolean;
+  threeDoublesJail: boolean;
+  stayedInJail: boolean;
+  leftJailWithDoubles: boolean;
+  fromIndex: number;
+  toIndex: number;
+  passedGo: boolean;
+  goToJailSpace: boolean;
+}
+
+export type InspectorTarget =
+  | { type: "district"; districtId: string }
+  | { type: "special"; spaceKind: SpecialSpaceKind; spaceIndex: number };
 
 export interface GameLogEntry {
   id: string;
@@ -75,6 +104,7 @@ export interface GameSnapshot {
   lastBuildRoll: "" | "1" | "2" | "3" | "r";
   blocksRemainingThisTurn: number;
   railroadEarnedThisTurn: boolean;
+  lastDiceRoll: DiceRollOutcome | null;
   rentDodgeHolderId: string | null;
   bankingMode: BankingMode;
   edition: BoardEdition;
@@ -118,6 +148,8 @@ function createInitialPlayers(count = 3): PlayerState[] {
     color: PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
     cash: STARTING_CASH,
     inJail: false,
+    position: 0,
+    doublesStreak: 0,
     stadiums: 0,
     hasTaxDodge: false,
     hasGetOutOfJail: false,
@@ -134,6 +166,7 @@ function createInitialSnapshot(): GameSnapshot {
     lastBuildRoll: "",
     blocksRemainingThisTurn: 0,
     railroadEarnedThisTurn: false,
+    lastDiceRoll: null,
     rentDodgeHolderId: null,
     bankingMode: "digital",
     edition: "city",
@@ -144,14 +177,14 @@ function createInitialSnapshot(): GameSnapshot {
       {
         id: "init",
         time: "00:00",
-        text: "Welcome to Monopoly City! Set up your players and start Turn 1.",
+        text: "Welcome to Monopoly City! Tap ROLL DICE to begin Turn 1.",
         type: "info",
       },
     ],
   };
 }
 
-const STORAGE_KEY = "monopoly_city_companion_v2";
+const STORAGE_KEY = "monopoly_city_companion_v3";
 
 export interface ComputedDistrictInfo {
   district: District;
@@ -161,6 +194,7 @@ export interface ComputedDistrictInfo {
   groupHasSkyscraper: boolean;
   ownerHasMonopolyTower: boolean;
   rentResult: RentResult;
+  playersHere: PlayerState[];
 }
 
 export interface ComputedPlayerStats {
@@ -179,6 +213,10 @@ export interface ComputedPlayerStats {
 
 interface GameStoreContextValue {
   state: GameSnapshot;
+  selectedInspector: InspectorTarget;
+  setSelectedInspector: (target: InspectorTarget) => void;
+  activeModal: OverlayModal;
+  setActiveModal: (modal: OverlayModal) => void;
   sessionRunning: boolean;
   setSessionRunning: (running: boolean | ((prev: boolean) => boolean)) => void;
   resetTimer: (startImmediately?: boolean) => void;
@@ -195,6 +233,12 @@ interface GameStoreContextValue {
   setTurnStep: (step: TurnStep) => void;
   nextTurn: (rolledDoubles?: boolean) => void;
   setActivePlayerIndex: (index: number) => void;
+  commitDiceRoll: (d1: number, d2: number) => DiceRollOutcome;
+  movePlayerToSpace: (
+    playerId: string,
+    targetSpaceIndex: number,
+    collectGoIfPassed?: boolean
+  ) => void;
   addPlayer: (name?: string) => void;
   removePlayer: (playerId: string) => void;
   updatePlayer: (playerId: string, patch: Partial<PlayerState>) => void;
@@ -254,7 +298,14 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
         districts: { ...base.districts, ...(parsed.districts ?? {}) },
         players:
           Array.isArray(parsed.players) && parsed.players.length >= 2
-            ? parsed.players
+            ? parsed.players.map((p, i) => ({
+                ...base.players[0]!,
+                ...p,
+                color: p.color ?? PLAYER_COLORS[i % PLAYER_COLORS.length]!,
+                position: typeof p.position === "number" ? p.position : 0,
+                doublesStreak:
+                  typeof p.doublesStreak === "number" ? p.doublesStreak : 0,
+              }))
             : base.players,
       };
     } catch {
@@ -262,6 +313,11 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  const [selectedInspector, setSelectedInspector] = useState<InspectorTarget>({
+    type: "district",
+    districtId: DISTRICTS[0]!.id,
+  });
+  const [activeModal, setActiveModal] = useState<OverlayModal>("none");
   const [history, setHistory] = useState<GameSnapshot[]>([]);
   const [sessionRunning, setSessionRunning] = useState(false);
 
@@ -363,6 +419,8 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
         color: PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
         cash: STARTING_CASH,
         inJail: false,
+        position: 0,
+        doublesStreak: 0,
         stadiums: 0,
         hasTaxDodge: false,
         hasGetOutOfJail: false,
@@ -411,6 +469,7 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
       lastBuildRoll: "",
       blocksRemainingThisTurn: 0,
       railroadEarnedThisTurn: false,
+      lastDiceRoll: null,
     }));
   }, []);
 
@@ -429,6 +488,12 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
             lastBuildRoll: "",
             blocksRemainingThisTurn: 0,
             railroadEarnedThisTurn: false,
+            lastDiceRoll: null,
+            players: prev.players.map((p, idx) =>
+              !rolledDoubles && idx === prev.activePlayerIndex
+                ? { ...p, doublesStreak: 0 }
+                : p
+            ),
           };
         },
         {
@@ -445,6 +510,232 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
     [commit, state.activePlayerIndex, state.players]
   );
 
+  const selectSpaceInInspector = useCallback((spaceIndex: number) => {
+    const sp = BOARD_SPACES[((spaceIndex % 40) + 40) % 40]!;
+    if (sp.kind === "district" && sp.districtId) {
+      setSelectedInspector({ type: "district", districtId: sp.districtId });
+    } else if (sp.kind !== "district") {
+      setSelectedInspector({
+        type: "special",
+        spaceKind: sp.kind,
+        spaceIndex: sp.index,
+      });
+    }
+  }, []);
+
+  const commitDiceRoll = useCallback(
+    (d1: number, d2: number): DiceRollOutcome => {
+      const activePlayer =
+        state.players[state.activePlayerIndex] ?? state.players[0]!;
+      const total = d1 + d2;
+      const isDoubles = d1 === d2;
+      const fromIndex = activePlayer.position ?? 0;
+
+      // Case 1: Player is currently in Jail
+      if (activePlayer.inJail) {
+        if (isDoubles) {
+          const toIndex = (10 + total) % 40;
+          const outcome: DiceRollOutcome = {
+            playerId: activePlayer.id,
+            d1,
+            d2,
+            total,
+            isDoubles: true,
+            threeDoublesJail: false,
+            stayedInJail: false,
+            leftJailWithDoubles: true,
+            fromIndex: 10,
+            toIndex,
+            passedGo: false,
+            goToJailSpace: false,
+          };
+          commit(
+            (prev) => ({
+              ...prev,
+              turnStep: "land",
+              lastDiceRoll: outcome,
+              players: prev.players.map((p) =>
+                p.id === activePlayer.id
+                  ? { ...p, inJail: false, position: toIndex, doublesStreak: 0 }
+                  : p
+              ),
+            }),
+            {
+              type: "turn",
+              text: `${activePlayer.name} rolled doubles (${d1}+${d2}=${total}) to escape Jail → landed on ${getSpaceDisplayName(toIndex, state.edition)}!`,
+            }
+          );
+          selectSpaceInInspector(toIndex);
+          return outcome;
+        } else {
+          const outcome: DiceRollOutcome = {
+            playerId: activePlayer.id,
+            d1,
+            d2,
+            total,
+            isDoubles: false,
+            threeDoublesJail: false,
+            stayedInJail: true,
+            leftJailWithDoubles: false,
+            fromIndex: 10,
+            toIndex: 10,
+            passedGo: false,
+            goToJailSpace: false,
+          };
+          commit(
+            (prev) => ({
+              ...prev,
+              turnStep: "build",
+              lastDiceRoll: outcome,
+            }),
+            {
+              type: "turn",
+              text: `${activePlayer.name} rolled ${d1}+${d2}=${total} in Jail (no doubles) — stays in Jail, may still press BUILD!`,
+            }
+          );
+          selectSpaceInInspector(10);
+          return outcome;
+        }
+      }
+
+      // Case 2: 3rd consecutive doubles -> Go Directly to Jail!
+      const nextStreak = isDoubles ? (activePlayer.doublesStreak ?? 0) + 1 : 0;
+      if (nextStreak >= 3) {
+        const outcome: DiceRollOutcome = {
+          playerId: activePlayer.id,
+          d1,
+          d2,
+          total,
+          isDoubles: true,
+          threeDoublesJail: true,
+          stayedInJail: false,
+          leftJailWithDoubles: false,
+          fromIndex,
+          toIndex: 10,
+          passedGo: false,
+          goToJailSpace: false,
+        };
+        commit(
+          (prev) => ({
+            ...prev,
+            turnStep: "build",
+            lastDiceRoll: outcome,
+            players: prev.players.map((p) =>
+              p.id === activePlayer.id
+                ? { ...p, inJail: true, position: 10, doublesStreak: 0 }
+                : p
+            ),
+          }),
+          {
+            type: "turn",
+            text: `${activePlayer.name} rolled 3× DOUBLES in a row (${d1}+${d2}) — sent directly to JAIL!`,
+          }
+        );
+        selectSpaceInInspector(10);
+        return outcome;
+      }
+
+      // Case 3: Normal movement around the 40 spaces
+      const rawTarget = fromIndex + total;
+      const landedIndex = rawTarget % 40;
+      const isGoToJail = landedIndex === 30;
+      const finalIndex = isGoToJail ? 10 : landedIndex;
+      const passedGo = !isGoToJail && rawTarget >= 40;
+      const goSalary = BASE_GO_SALARY + activePlayer.stadiums * STADIUM_GO_BONUS;
+
+      const outcome: DiceRollOutcome = {
+        playerId: activePlayer.id,
+        d1,
+        d2,
+        total,
+        isDoubles,
+        threeDoublesJail: false,
+        stayedInJail: false,
+        leftJailWithDoubles: false,
+        fromIndex,
+        toIndex: finalIndex,
+        passedGo,
+        goToJailSpace: isGoToJail,
+      };
+
+      commit(
+        (prev) => ({
+          ...prev,
+          turnStep: "land",
+          lastDiceRoll: outcome,
+          players: prev.players.map((p) => {
+            if (p.id !== activePlayer.id) return p;
+            return {
+              ...p,
+              position: finalIndex,
+              inJail: isGoToJail ? true : p.inJail,
+              doublesStreak: isGoToJail ? 0 : nextStreak,
+              cash:
+                passedGo && prev.bankingMode === "digital"
+                  ? p.cash + goSalary
+                  : p.cash,
+            };
+          }),
+        }),
+        {
+          type: "turn",
+          text: isGoToJail
+            ? `${activePlayer.name} rolled ${d1}+${d2}=${total} → landed on GO TO JAIL!`
+            : `${activePlayer.name} rolled ${d1}+${d2}=${total}${
+                isDoubles ? " (DOUBLES!)" : ""
+              } → ${getSpaceDisplayName(finalIndex, state.edition)}${
+                passedGo ? ` (+${formatK(goSalary)} GO Salary!)` : ""
+              }`,
+        }
+      );
+
+      selectSpaceInInspector(finalIndex);
+      return outcome;
+    },
+    [commit, selectSpaceInInspector, state.activePlayerIndex, state.edition, state.players]
+  );
+
+  const movePlayerToSpace = useCallback(
+    (
+      playerId: string,
+      targetSpaceIndex: number,
+      collectGoIfPassed = false
+    ) => {
+      const normalized = ((targetSpaceIndex % 40) + 40) % 40;
+      const player = state.players.find((p) => p.id === playerId);
+      if (!player) return;
+      const passedGo = collectGoIfPassed && normalized < player.position;
+      const goSalary = BASE_GO_SALARY + player.stadiums * STADIUM_GO_BONUS;
+
+      commit(
+        (prev) => ({
+          ...prev,
+          players: prev.players.map((p) => {
+            if (p.id !== playerId) return p;
+            return {
+              ...p,
+              position: normalized,
+              inJail: normalized === 30 ? true : p.inJail,
+              cash:
+                passedGo && prev.bankingMode === "digital"
+                  ? p.cash + goSalary
+                  : p.cash,
+            };
+          }),
+        }),
+        {
+          type: "turn",
+          text: `${player.name} moved to ${getSpaceDisplayName(
+            normalized,
+            state.edition
+          )}${passedGo ? ` (+${formatK(goSalary)} GO)` : ""}`,
+        }
+      );
+      selectSpaceInInspector(normalized);
+    },
+    [commit, selectSpaceInInspector, state.edition, state.players]
+  );
+
   const addPlayer = useCallback(
     (name?: string) => {
       commit((prev) => {
@@ -456,6 +747,8 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
           color: PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
           cash: STARTING_CASH,
           inJail: false,
+          position: 0,
+          doublesStreak: 0,
           stadiums: 0,
           hasTaxDodge: false,
           hasGetOutOfJail: false,
@@ -543,9 +836,8 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
     [commit, state.players]
   );
 
-  // Compute all district information with group ownership & multipliers
+  // Compute all district information with group ownership, multipliers, and player tokens standing there
   const allDistrictInfos = useMemo<ComputedDistrictInfo[]>(() => {
-    // Check which player owns the Monopoly Tower
     let monopolyTowerOwnerId: string | null = null;
     for (const d of DISTRICTS) {
       const st = state.districts[d.id];
@@ -596,6 +888,10 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
         mortgaged: st.mortgaged,
       });
 
+      const playersHere = state.players.filter(
+        (p) => p.position === district.boardSpaceIndex
+      );
+
       return {
         district,
         state: st,
@@ -604,6 +900,7 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
         groupHasSkyscraper,
         ownerHasMonopolyTower,
         rentResult,
+        playersHere,
       };
     });
   }, [state.districts, state.players]);
@@ -759,9 +1056,10 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
         }),
         {
           type: "info",
-          text: prevHolder && prevHolder.id !== playerId
-            ? `${player?.name ?? "Player"} landed on Free Parking and took the Rent Dodge card from ${prevHolder.name}!`
-            : `${player?.name ?? "Player"} landed on Free Parking and claimed the Rent Dodge card!`,
+          text:
+            prevHolder && prevHolder.id !== playerId
+              ? `${player?.name ?? "Player"} landed on Free Parking and took the Rent Dodge card from ${prevHolder.name}!`
+              : `${player?.name ?? "Player"} landed on Free Parking and claimed the Rent Dodge card!`,
         }
       );
     },
@@ -979,7 +1277,6 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
               [districtId]: {
                 ...prev.districts[districtId]!,
                 bonus: bonusVal,
-                // Official rule: Bonus building protects district from hazards
               },
             },
           }),
@@ -994,7 +1291,6 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
       } else {
         const hazardVal = value as HazardKey;
         if (info.state.bonus !== "none" && hazardVal !== "none") {
-          // Cannot place hazard on a district protected by a Bonus building
           return;
         }
         commit(
@@ -1221,7 +1517,7 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
         commit(
           (prev) => ({
             ...prev,
-            rentDodgeHolderId: null, // Returned to Free Parking!
+            rentDodgeHolderId: null,
           }),
           {
             type: "info",
@@ -1277,6 +1573,10 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<GameStoreContextValue>(
     () => ({
       state,
+      selectedInspector,
+      setSelectedInspector,
+      activeModal,
+      setActiveModal,
       sessionRunning,
       setSessionRunning,
       resetTimer,
@@ -1289,6 +1589,8 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
       setTurnStep,
       nextTurn,
       setActivePlayerIndex,
+      commitDiceRoll,
+      movePlayerToSpace,
       addPlayer,
       removePlayer,
       updatePlayer,
@@ -1320,6 +1622,8 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       state,
+      selectedInspector,
+      activeModal,
       sessionRunning,
       resetTimer,
       history.length,
@@ -1331,6 +1635,8 @@ export function GameStoreProvider({ children }: { children: ReactNode }) {
       setTurnStep,
       nextTurn,
       setActivePlayerIndex,
+      commitDiceRoll,
+      movePlayerToSpace,
       addPlayer,
       removePlayer,
       updatePlayer,
@@ -1376,4 +1682,3 @@ export function useGameStore(): GameStoreContextValue {
   }
   return ctx;
 }
-

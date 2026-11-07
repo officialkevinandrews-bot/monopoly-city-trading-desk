@@ -204,7 +204,7 @@ function RentAndCityPage() {
   };
 
   return (
-    <AppShell>
+    <AppShell scrollable>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl tracking-wide">

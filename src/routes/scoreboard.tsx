@@ -68,7 +68,7 @@ function Scoreboard() {
   );
 
   return (
-    <AppShell>
+    <AppShell scrollable>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl tracking-wide">
